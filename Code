@@ -1,1 +1,363 @@
+import React, { useMemo, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts";
+import { Factory, TrendingUp, DollarSign, Clock, Package, Users, RotateCcw, AlertTriangle, BookOpen, Target, Wrench, Gauge } from "lucide-react";
+
+const currency = (v) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(Number.isFinite(v) ? v : 0);
+const number = (v) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number.isFinite(v) ? v : 0);
+
+function NumberField({ label, value, setValue, prefix = "", suffix = "", min = 0, step = 1, helper }) {
+  return (
+    <div className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
+      <div>
+        <Label className="text-sm font-semibold text-slate-800">{label}</Label>
+        {helper && <p className="mt-1 text-xs leading-relaxed text-slate-500">{helper}</p>}
+      </div>
+      <div className="flex items-center gap-2 rounded-xl border bg-slate-50 px-3 py-2">
+        {prefix && <span className="text-sm text-slate-500">{prefix}</span>}
+        <Input type="number" value={value} min={min} step={step} onChange={(e) => setValue(Number(e.target.value))} className="border-0 bg-transparent p-0 shadow-none focus-visible:ring-0" />
+        {suffix && <span className="text-sm text-slate-500">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function EvidenceSlider({ label, value, setValue, min, max, step = 1, suffix = "%", likelyNow, realisticTarget, bestCase, source, helper }) {
+  return (
+    <div className="space-y-4 rounded-2xl border bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Label className="text-sm font-semibold text-slate-800">{label}</Label>
+          {helper && <p className="mt-1 text-xs leading-relaxed text-slate-500">{helper}</p>}
+        </div>
+        <Badge className="rounded-full">{value}{suffix}</Badge>
+      </div>
+      <Slider value={[value]} min={min} max={max} step={step} onValueChange={(v) => setValue(v[0])} />
+      <div className="grid grid-cols-3 gap-2 text-xs">
+        <div className="rounded-xl bg-slate-100 p-2"><div className="font-semibold text-slate-700">Likely now</div><div className="text-slate-600">{likelyNow}</div></div>
+        <div className="rounded-xl bg-slate-100 p-2"><div className="font-semibold text-slate-700">Realistic target</div><div className="text-slate-600">{realisticTarget}</div></div>
+        <div className="rounded-xl bg-slate-100 p-2"><div className="font-semibold text-slate-700">Upper evidence</div><div className="text-slate-600">{bestCase}</div></div>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
+        <span className="font-semibold text-slate-800">Grounding:</span> {source}
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ icon: Icon, title, value, subtitle }) {
+  return (
+    <Card className="rounded-2xl border-slate-200 shadow-sm">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-slate-500">{title}</p>
+            <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{value}</p>
+            {subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}
+          </div>
+          <div className="rounded-2xl bg-slate-100 p-3"><Icon className="h-5 w-5 text-slate-700" /></div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const maturityProfiles = {
+  reactive: {
+    label: "Reactive / spreadsheet-led",
+    description: "Frequent schedule churn, manual replanning, MRP signals overridden by planners, weak finite-capacity visibility.",
+    wipReduction: 12,
+    inventoryReduction: 6,
+    overtimeReduction: 18,
+    expediteReduction: 20,
+    recoverableLostSales: 10,
+    plannerProductivityGain: 25,
+    capacityUnlocked: 8,
+    scheduleStabilityGain: 15,
+  },
+  improving: {
+    label: "Improving / ERP + disciplined planning",
+    description: "Basic MRP is trusted, but capacity, sequencing, changeovers, and scenario planning are still partly manual.",
+    wipReduction: 18,
+    inventoryReduction: 10,
+    overtimeReduction: 30,
+    expediteReduction: 35,
+    recoverableLostSales: 22,
+    plannerProductivityGain: 40,
+    capacityUnlocked: 16,
+    scheduleStabilityGain: 25,
+  },
+  advanced: {
+    label: "Advanced / APS + feedback loops",
+    description: "Finite capacity scheduling, what-if scenarios, stable MPS rules, production feedback, and KPI governance are in place.",
+    wipReduction: 28,
+    inventoryReduction: 18,
+    overtimeReduction: 45,
+    expediteReduction: 50,
+    recoverableLostSales: 35,
+    plannerProductivityGain: 55,
+    capacityUnlocked: 25,
+    scheduleStabilityGain: 40,
+  },
+};
+
+export default function ManufacturingPlanningROICalculatorRev2() {
+  const [profile, setProfile] = useState("improving");
+  const [revenue, setRevenue] = useState(50000000);
+  const [grossMargin, setGrossMargin] = useState(32);
+  const [employees, setEmployees] = useState(250);
+  const [plannerCount, setPlannerCount] = useState(6);
+  const [avgLoadedLaborRate, setAvgLoadedLaborRate] = useState(45);
+  const [plannerLoadedCost, setPlannerLoadedCost] = useState(95000);
+  const [wipValue, setWipValue] = useState(3500000);
+  const [inventoryValue, setInventoryValue] = useState(9000000);
+  const [carryingCostRate, setCarryingCostRate] = useState(22);
+  const [currentOTD, setCurrentOTD] = useState(82);
+  const [targetOTD, setTargetOTD] = useState(94);
+  const [scheduleChangesPerWeek, setScheduleChangesPerWeek] = useState(18);
+  const [overtimePct, setOvertimePct] = useState(8);
+  const [expediteCostPctRevenue, setExpediteCostPctRevenue] = useState(1.2);
+  const [lostSalesPctRevenue, setLostSalesPctRevenue] = useState(2.0);
+  const [capacityConstraintPctRevenue, setCapacityConstraintPctRevenue] = useState(4);
+  const [implementationCost, setImplementationCost] = useState(250000);
+  const [annualSoftwareCost, setAnnualSoftwareCost] = useState(150000);
+
+  const p = maturityProfiles[profile];
+
+  const applyProfile = (key) => setProfile(key);
+
+  const results = useMemo(() => {
+    const wipSavings = wipValue * (p.wipReduction / 100) * (carryingCostRate / 100);
+    const inventorySavings = inventoryValue * (p.inventoryReduction / 100) * (carryingCostRate / 100);
+    const annualLaborBase = employees * avgLoadedLaborRate * 2080;
+    const overtimeCost = annualLaborBase * (overtimePct / 100) * 0.5;
+    const overtimeSavings = overtimeCost * (p.overtimeReduction / 100);
+    const expediteCost = revenue * (expediteCostPctRevenue / 100);
+    const expediteSavings = expediteCost * (p.expediteReduction / 100);
+    const lostSales = revenue * (lostSalesPctRevenue / 100);
+    const recoveredRevenue = lostSales * (p.recoverableLostSales / 100);
+    const recoveredGrossProfit = recoveredRevenue * (grossMargin / 100);
+    const churnCost = plannerCount * 10 * 52 * (plannerLoadedCost / 2080);
+    const plannerSavings = churnCost * (p.plannerProductivityGain / 100);
+    const constrainedRevenue = revenue * (capacityConstraintPctRevenue / 100);
+    const unlockedRevenue = constrainedRevenue * (p.capacityUnlocked / 100);
+    const unlockedGrossProfit = unlockedRevenue * (grossMargin / 100);
+    const totalAnnualBenefit = wipSavings + inventorySavings + overtimeSavings + expediteSavings + recoveredGrossProfit + plannerSavings + unlockedGrossProfit;
+    const netAnnualBenefit = totalAnnualBenefit - annualSoftwareCost;
+    const yearOneNet = netAnnualBenefit - implementationCost;
+    const paybackMonths = netAnnualBenefit > 0 ? (implementationCost / netAnnualBenefit) * 12 : Infinity;
+    const marginPointImpact = revenue > 0 ? (netAnnualBenefit / revenue) * 100 : 0;
+    const likelyFutureOTD = Math.min(99, currentOTD + ((targetOTD - currentOTD) * (p.scheduleStabilityGain / 40)));
+    const futureScheduleChanges = Math.max(0, scheduleChangesPerWeek * (1 - p.scheduleStabilityGain / 100));
+    return { wipSavings, inventorySavings, overtimeSavings, expediteSavings, recoveredGrossProfit, plannerSavings, unlockedGrossProfit, totalAnnualBenefit, netAnnualBenefit, yearOneNet, paybackMonths, marginPointImpact, recoveredRevenue, unlockedRevenue, likelyFutureOTD, futureScheduleChanges };
+  }, [revenue, grossMargin, employees, plannerCount, avgLoadedLaborRate, plannerLoadedCost, wipValue, inventoryValue, carryingCostRate, overtimePct, expediteCostPctRevenue, lostSalesPctRevenue, capacityConstraintPctRevenue, implementationCost, annualSoftwareCost, p, currentOTD, targetOTD, scheduleChangesPerWeek]);
+
+  const benefitData = [
+    { name: "WIP", value: results.wipSavings },
+    { name: "Inventory", value: results.inventorySavings },
+    { name: "Overtime", value: results.overtimeSavings },
+    { name: "Expediting", value: results.expediteSavings },
+    { name: "Recovered Sales", value: results.recoveredGrossProfit },
+    { name: "Planner Time", value: results.plannerSavings },
+    { name: "Capacity", value: results.unlockedGrossProfit },
+  ];
+
+  const bridgeData = [
+    { name: "OTD Now", value: currentOTD },
+    { name: "Likely After", value: Number(results.likelyFutureOTD.toFixed(1)) },
+    { name: "Target", value: targetOTD },
+  ];
+
+  const tools = [
+    { title: "Finite-capacity APS", why: "Derived from Jodlbauer & Strasser, Capacity-driven production planning: traditional MRP schedules on-demand production orders without considering limited production-resource capacities.", impact: "Best tied to WIP, overtime, capacity, and delivery promise reliability." },
+    { title: "MPS freeze windows + exception rules", why: "Derived from Pujawan & Smart, Factors affecting schedule instability in manufacturing companies: schedule instability is associated with low service levels, high inventory, and production-changeover costs.", impact: "Best tied to schedule stability, changeover cost, planner productivity, and customer service." },
+    { title: "Scenario planning / digital twin", why: "Derived from Deloitte smart-factory research and next-generation scheduling concepts: faster scenario evaluation helps planners respond to disruption before committing a bad plan to the floor.", impact: "Best tied to expediting, recoverable sales, and capacity utilization." },
+    { title: "Shop-floor feedback loop", why: "Derived from Deloitte smart-factory research: connected production data, automation, and integrated control were linked to lower lead times, lower cost, 25% capacity improvement, and 50% fewer defects in one cited case.", impact: "Best tied to lead-time accuracy, bottleneck visibility, and schedule credibility." },
+    { title: "Planning KPI dashboard", why: "Derived from Bain supply-chain research: strategic manufacturing and distribution network management can improve plant output, inventory turns, and margin; KPI governance is how those benefits are tracked and sustained.", impact: "Best tied to governance and executive-level accountability." },
+  ];
+
+  const evidenceNotes = [
+    {
+      source: "Pujawan & Smart — Factors affecting schedule instability in manufacturing companies, International Journal of Production Research, 2012",
+      finding: "Schedule instability is described as a major manufacturing issue associated with low customer service, high inventory, and high production-changeover costs.",
+      usedFor: "Supports WIP, service-level, expediting, changeover, and schedule-churn assumptions."
+    },
+    {
+      source: "Jodlbauer & Strasser — Capacity-driven production planning, Computers in Industry, 2019",
+      finding: "Traditional MRP is described as scheduling production orders without considering limited production-resource capacity.",
+      usedFor: "Supports finite-capacity APS, capacity-constrained revenue, overtime, and feasible-schedule assumptions."
+    },
+    {
+      source: "Bain — Turn Your Supply Chain into a Competitive Weapon",
+      finding: "Bain reports that a strategic approach can improve plant output by up to 25%, inventory turns by up to 40%, and gross margins by 6–10 percentage points.",
+      usedFor: "Used as upper-evidence guardrails for capacity, inventory-turn, and margin-impact ranges."
+    },
+    {
+      source: "Deloitte — Industry 4.0, smart factory, and connected manufacturing",
+      finding: "Deloitte cites a smart-factory case with lower lead times, lower overall costs, 25% production-capacity improvement, and 50% fewer defective products.",
+      usedFor: "Used as an upper-evidence guardrail for capacity improvement and connected shop-floor feedback benefits."
+    }
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 text-slate-900 md:p-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="rounded-3xl bg-white p-6 shadow-sm md:p-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-4xl">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700"><BookOpen className="h-4 w-4" /> Revision 2: Research-grounded model</div>
+              <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Manufacturing Planning Impact Calculator</h1>
+              <p className="mt-3 text-base leading-relaxed text-slate-600">This revision separates assumed company economics from research-grounded improvement ranges. Use the maturity profile to show where a manufacturer is likely landing today and what outcome range they could reasonably pursue with planning-process and tooling improvements.</p>
+            </div>
+            <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-600 lg:w-96">
+              <div className="font-semibold text-slate-900">Evidence guardrails</div>
+              <p className="mt-2">The model intentionally caps planning outcomes below the largest published headline claims unless the “Advanced” profile is selected. Bain and Deloitte are treated as upper-bound examples, while Pujawan & Smart and Jodlbauer & Strasser explain why schedule instability and capacity-blind MRP create measurable cost.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard icon={DollarSign} title="Net Annual Benefit" value={currency(results.netAnnualBenefit)} subtitle="After annual software/support cost" />
+          <MetricCard icon={Clock} title="Payback Period" value={Number.isFinite(results.paybackMonths) ? `${results.paybackMonths.toFixed(1)} months` : "N/A"} subtitle="Based on implementation cost" />
+          <MetricCard icon={TrendingUp} title="Margin-Point Impact" value={`${results.marginPointImpact.toFixed(2)} pts`} subtitle="Net benefit as % of revenue" />
+          <MetricCard icon={Gauge} title="OTD Movement" value={`${currentOTD}% → ${results.likelyFutureOTD.toFixed(1)}%`} subtitle="Modeled planning-stability improvement" />
+        </div>
+
+        <Card className="rounded-3xl shadow-sm">
+          <CardContent className="p-5 md:p-6">
+            <div className="mb-4 flex items-center gap-2"><Target className="h-5 w-5" /><h2 className="text-xl font-bold">Where are they likely now?</h2></div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {Object.entries(maturityProfiles).map(([key, item]) => (
+                <button key={key} onClick={() => applyProfile(key)} className={`rounded-2xl border p-4 text-left transition ${profile === key ? "border-slate-900 bg-slate-900 text-white" : "bg-white hover:bg-slate-50"}`}>
+                  <div className="font-bold">{item.label}</div>
+                  <p className={`mt-2 text-xs leading-relaxed ${profile === key ? "text-slate-200" : "text-slate-600"}`}>{item.description}</p>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 rounded-2xl bg-slate-100 p-4 text-sm leading-relaxed text-slate-700"><span className="font-semibold">Selected profile:</span> {p.label}. This sets the improvement assumptions used in the ROI model while still letting company economics remain editable.</div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-6 lg:grid-cols-5">
+          <div className="space-y-6 lg:col-span-2">
+            <Card className="rounded-3xl shadow-sm">
+              <CardContent className="p-5 md:p-6">
+                <Tabs defaultValue="baseline" className="space-y-5">
+                  <TabsList className="grid w-full grid-cols-3 rounded-2xl"><TabsTrigger value="baseline">Baseline</TabsTrigger><TabsTrigger value="operating">Operating</TabsTrigger><TabsTrigger value="investment">Investment</TabsTrigger></TabsList>
+                  <TabsContent value="baseline" className="space-y-4">
+                    <NumberField label="Annual Revenue" value={revenue} setValue={setRevenue} prefix="$" step={1000000} />
+                    <NumberField label="Gross Margin" value={grossMargin} setValue={setGrossMargin} suffix="%" helper="Used for recovered sales and capacity-driven revenue." />
+                    <NumberField label="Employees" value={employees} setValue={setEmployees} suffix="people" />
+                    <NumberField label="Planning / Scheduling Employees" value={plannerCount} setValue={setPlannerCount} suffix="people" />
+                    <NumberField label="Average Loaded Shop Labor Rate" value={avgLoadedLaborRate} setValue={setAvgLoadedLaborRate} prefix="$" suffix="/hr" />
+                    <NumberField label="Average Loaded Planner Cost" value={plannerLoadedCost} setValue={setPlannerLoadedCost} prefix="$" suffix="/yr" step={5000} />
+                  </TabsContent>
+                  <TabsContent value="operating" className="space-y-4">
+                    <NumberField label="Current WIP Value" value={wipValue} setValue={setWipValue} prefix="$" step={100000} helper="Use current open production value or average WIP balance." />
+                    <NumberField label="Current Inventory Value" value={inventoryValue} setValue={setInventoryValue} prefix="$" step={100000} />
+                    <NumberField label="Inventory Carrying Cost Rate" value={carryingCostRate} setValue={setCarryingCostRate} suffix="%" helper="Common business-case range is often 15–30%; adjust to your finance team's view." />
+                    <NumberField label="Current On-Time Delivery" value={currentOTD} setValue={setCurrentOTD} suffix="%" />
+                    <NumberField label="Target On-Time Delivery" value={targetOTD} setValue={setTargetOTD} suffix="%" />
+                    <NumberField label="Major Schedule Changes per Week" value={scheduleChangesPerWeek} setValue={setScheduleChangesPerWeek} suffix="changes" helper="Use changes that materially affect dates, priorities, routing, or shop-floor sequence." />
+                    <NumberField label="Overtime as % of Base Labor" value={overtimePct} setValue={setOvertimePct} suffix="%" />
+                    <NumberField label="Expediting Cost as % of Revenue" value={expediteCostPctRevenue} setValue={setExpediteCostPctRevenue} suffix="%" step={0.1} />
+                    <NumberField label="Lost / Delayed Sales from Poor Delivery" value={lostSalesPctRevenue} setValue={setLostSalesPctRevenue} suffix="%" step={0.1} />
+                    <NumberField label="Constrained Revenue Opportunity" value={capacityConstraintPctRevenue} setValue={setCapacityConstraintPctRevenue} suffix="%" step={0.5} />
+                  </TabsContent>
+                  <TabsContent value="investment" className="space-y-4">
+                    <NumberField label="One-Time Implementation Cost" value={implementationCost} setValue={setImplementationCost} prefix="$" step={25000} />
+                    <NumberField label="Annual Software / Support Cost" value={annualSoftwareCost} setValue={setAnnualSoftwareCost} prefix="$" step={25000} />
+                    <div className="rounded-2xl border bg-slate-50 p-4 text-sm leading-relaxed text-slate-600"><span className="font-semibold text-slate-900">Use this for:</span> APS software, ERP integration, data cleanup, implementation services, training, and change-management cost.</div>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl shadow-sm">
+              <CardContent className="p-5 md:p-6">
+                <div className="mb-4 flex items-center gap-2"><Wrench className="h-5 w-5" /><h2 className="text-xl font-bold">Tools that move the numbers</h2></div>
+                <div className="space-y-3">
+                  {tools.map((t) => (
+                    <div key={t.title} className="rounded-2xl border bg-white p-4">
+                      <div className="font-semibold text-slate-900">{t.title}</div>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-600">{t.why}</p>
+                      <p className="mt-2 text-xs font-medium text-slate-700">{t.impact}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-6 lg:col-span-3">
+            <Card className="rounded-3xl shadow-sm">
+              <CardContent className="p-5 md:p-6">
+                <h2 className="text-xl font-bold">Research-grounded improvement assumptions</h2>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">The sliders below are controlled by the maturity profile. They show the current profile's expected improvement, plus a likely-current/realistic-target/evidence-maximum frame so the model does not look like a made-up ROI calculator.</p>
+                <div className="mt-5 grid gap-4">
+                  <EvidenceSlider label="WIP Reduction" value={p.wipReduction} setValue={() => {}} min={0} max={50} likelyNow="High WIP and queueing when schedules churn" realisticTarget="10–25% WIP improvement" bestCase="Can be higher in constrained/high-mix plants" source="Based on Pujawan & Smart, 2012: schedule instability is identified as a major manufacturing issue tied to low service levels, high inventory, and production-changeover costs. Also supported by Jodlbauer & Strasser, 2019, which highlights the capacity-blind nature of traditional MRP." helper="Lower WIP reduces carrying cost and often shortens lead time." />
+                  <EvidenceSlider label="Inventory Reduction / Turn Improvement Proxy" value={p.inventoryReduction} setValue={() => {}} min={0} max={40} likelyNow="ERP/MRP buffers compensate for schedule uncertainty" realisticTarget="5–20% inventory improvement" bestCase="Bain cites up to 40% inventory-turn improvement" source="Based on Bain, Turn Your Supply Chain into a Competitive Weapon: Bain reports that companies taking a more strategic approach can improve inventory turns by up to 40%. This model uses a more conservative inventory-reduction proxy rather than assuming the full headline result." helper="This slider uses inventory reduction as a conservative proxy for inventory-turn improvement." />
+                  <EvidenceSlider label="Overtime Reduction" value={p.overtimeReduction} setValue={() => {}} min={0} max={75} likelyNow="Overtime used to recover bad schedule promises" realisticTarget="15–45% avoidable overtime reduction" bestCase="Depends heavily on demand stability and labor flexibility" source="Based on Pujawan & Smart, 2012: schedule instability creates service and changeover-cost problems. Overtime is included as a financial symptom of that instability, not as a directly quoted percentage from the paper." helper="Only the overtime premium is counted, not total labor." />
+                  <EvidenceSlider label="Expediting Reduction" value={p.expediteReduction} setValue={() => {}} min={0} max={80} likelyNow="Premium freight and hot jobs hide planning failure" realisticTarget="20–50% reduction" bestCase="Higher if expediting is mostly schedule-driven" source="Based on Pujawan & Smart, 2012: unstable schedules are linked to low service levels and high changeover costs. Expediting is modeled as a practical cost bucket for recovering from those disruptions; the percentage range is an implementation assumption, not a direct quote." helper="Use this for premium freight, hot suppliers, manual chasing, and avoidable rescheduling effort." />
+                  <EvidenceSlider label="Capacity Opportunity Captured" value={p.capacityUnlocked} setValue={() => {}} min={0} max={40} likelyNow="Bottlenecks exist but are not visible soon enough" realisticTarget="8–25% of constrained opportunity" bestCase="Bain and Deloitte cite up to ~25% output/capacity examples" source="Based on Bain, Turn Your Supply Chain into a Competitive Weapon: plant output improved by up to 25% in Bain's cited strategic approach. Also based on Deloitte, Industry 4.0, smart factory, and connected manufacturing: one smart-factory case cited 25% production-capacity improvement." helper="This is not 25% of all revenue; it is the portion of constrained revenue opportunity captured." />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl shadow-sm">
+              <CardContent className="p-5 md:p-6">
+                <h2 className="text-xl font-bold">Source notes used in this model</h2>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">These are the named research anchors behind the slider language. Ranges marked as “implementation assumptions” should be validated with plant-specific data.</p>
+                <div className="mt-5 grid gap-3">
+                  {evidenceNotes.map((note) => (
+                    <div key={note.source} className="rounded-2xl border bg-white p-4">
+                      <div className="text-sm font-bold text-slate-900">{note.source}</div>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-600"><span className="font-semibold text-slate-800">Finding used:</span> {note.finding}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-600"><span className="font-semibold text-slate-800">Applied to:</span> {note.usedFor}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl shadow-sm">
+              <CardContent className="p-5 md:p-6">
+                <div className="mb-5 flex items-center justify-between gap-4"><div><h2 className="text-xl font-bold">Financial impact by driver</h2><p className="text-sm text-slate-500">Estimated annual profit/cost impact by category.</p></div><Badge className="rounded-full px-3 py-1">Net: {currency(results.netAnnualBenefit)}</Badge></div>
+                <div className="h-80 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={benefitData} margin={{ top: 10, right: 10, left: 10, bottom: 60 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" angle={-35} textAnchor="end" interval={0} tick={{ fontSize: 12 }} /><YAxis tickFormatter={(v) => `$${Math.round(v / 1000)}k`} /><Tooltip formatter={(v) => currency(v)} /><Bar dataKey="value" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></div>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="rounded-3xl shadow-sm">
+                <CardContent className="p-5 md:p-6">
+                  <h2 className="text-xl font-bold">Operational movement</h2>
+                  <div className="mt-5 h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={bridgeData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} /><Tooltip formatter={(v) => `${v}%`} /><ReferenceLine y={90} strokeDasharray="3 3" /><Bar dataKey="value" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></div>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-600">Schedule changes move from about <span className="font-bold text-slate-900">{number(scheduleChangesPerWeek)}</span> per week to <span className="font-bold text-slate-900">{results.futureScheduleChanges.toFixed(1)}</span> per week under this profile.</p>
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-3xl shadow-sm">
+                <CardContent className="p-5 md:p-6">
+                  <h2 className="text-xl font-bold">Executive interpretation</h2>
+                  <div className="mt-5 space-y-4 text-sm leading-relaxed text-slate-600">
+                    <p>For a <span className="font-bold text-slate-900">{currency(revenue)}</span> manufacturer with <span className="font-bold text-slate-900">{employees}</span> employees, the selected profile estimates <span className="font-bold text-slate-900">{currency(results.totalAnnualBenefit)}</span> in annual gross planning opportunity.</p>
+                    <p>After software/support cost, the recurring net benefit is <span className="font-bold text-slate-900">{currency(results.netAnnualBenefit)}</span>, or <span className="font-bold text-slate-900">{results.marginPointImpact.toFixed(2)}</span> margin points.</p>
+                    <p>Year-one net after implementation is <span className="font-bold text-slate-900">{currency(results.yearOneNet)}</span>. Estimated payback is <span className="font-bold text-slate-900">{Number.isFinite(results.paybackMonths) ? `${results.paybackMonths.toFixed(1)} months` : "not achieved"}</span>.</p>
+                    <div className="rounded-2xl bg-slate-100 p-4 text-xs">The model should be validated with actual WIP aging, inventory turns, premium freight, overtime, schedule-change counts, plan adherence, late orders, and bottleneck utilization.</div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
